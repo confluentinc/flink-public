@@ -54,6 +54,7 @@ import org.apache.flink.runtime.state.heap.HeapPriorityQueueSetFactory;
 import org.apache.flink.runtime.state.heap.HeapPriorityQueueSnapshotRestoreWrapper;
 import org.apache.flink.runtime.state.metrics.LatencyTrackingStateConfig;
 import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
+import org.apache.flink.runtime.taskmanager.AsyncExceptionHandler;
 import org.apache.flink.util.CollectionUtil;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.IOUtils;
@@ -145,6 +146,7 @@ public class RocksDBKeyedStateBackendBuilder<K> extends AbstractKeyedStateBacken
     private RocksDBManualCompactionConfig manualCompactionConfig =
             RocksDBManualCompactionConfig.getDefault();
     private ExecutorService ioExecutor;
+    private AsyncExceptionHandler asyncExceptionHandler;
 
     public RocksDBKeyedStateBackendBuilder(
             String operatorIdentifier,
@@ -330,7 +332,7 @@ public class RocksDBKeyedStateBackendBuilder<K> extends AbstractKeyedStateBacken
         RocksDBWriteBatchWrapper writeBatchWrapper = null;
         ColumnFamilyHandle defaultColumnFamilyHandle = null;
         RocksDBNativeMetricMonitor nativeMetricMonitor = null;
-        CloseableRegistry cancelStreamRegistryForBackend = new CloseableRegistry();
+        CloseableRegistry cancelRegistryForBackend = new CloseableRegistry();
         LinkedHashMap<String, RocksDBKeyedStateBackend.RocksDbKvStateInfo> kvStateInformation =
                 new LinkedHashMap<>();
         LinkedHashMap<String, HeapPriorityQueueSnapshotRestoreWrapper<?>> registeredPQStates =
@@ -369,7 +371,9 @@ public class RocksDBKeyedStateBackendBuilder<K> extends AbstractKeyedStateBacken
                 restoreOperation =
                         getRocksDBRestoreOperation(
                                 keyGroupPrefixBytes,
+                                rocksDBResourceGuard,
                                 cancelStreamRegistry,
+                                cancelRegistryForBackend,
                                 kvStateInformation,
                                 registeredPQStates,
                                 ttlCompactFiltersManager);
@@ -377,8 +381,13 @@ public class RocksDBKeyedStateBackendBuilder<K> extends AbstractKeyedStateBacken
                 db = restoreResult.getDb();
                 defaultColumnFamilyHandle = restoreResult.getDefaultColumnFamilyHandle();
                 nativeMetricMonitor = restoreResult.getNativeMetricMonitor();
-                asyncCompactAfterRestoreFuture =
-                        restoreResult.getAsyncCompactAfterRestoreFuture().orElse(null);
+                if (ioExecutor != null) {
+                    asyncCompactAfterRestoreFuture =
+                            restoreResult
+                                    .getAsyncCompactTaskAfterRestore()
+                                    .map((task) -> CompletableFuture.runAsync(task, ioExecutor))
+                                    .orElse(null);
+                }
                 if (restoreOperation instanceof RocksDBIncrementalRestoreOperation) {
                     backendUID = restoreResult.getBackendUID();
                     materializedSstFiles = restoreResult.getRestoredSstFiles();
@@ -425,8 +434,9 @@ public class RocksDBKeyedStateBackendBuilder<K> extends AbstractKeyedStateBacken
             // Do clean up
             List<ColumnFamilyOptions> columnFamilyOptions =
                     new ArrayList<>(kvStateInformation.values().size());
-            IOUtils.closeQuietly(cancelStreamRegistryForBackend);
+            IOUtils.closeQuietly(cancelRegistryForBackend);
             IOUtils.closeQuietly(writeBatchWrapper);
+            IOUtils.closeQuietly(rocksDBResourceGuard);
             RocksDBOperationUtils.addColumnFamilyOptionsToCloseLater(
                     columnFamilyOptions, defaultColumnFamilyHandle);
             IOUtils.closeQuietly(defaultColumnFamilyHandle);
@@ -476,7 +486,7 @@ public class RocksDBKeyedStateBackendBuilder<K> extends AbstractKeyedStateBacken
                 kvStateInformation,
                 registeredPQStates,
                 keyGroupPrefixBytes,
-                cancelStreamRegistryForBackend,
+                cancelRegistryForBackend,
                 this.keyGroupCompressionDecorator,
                 rocksDBResourceGuard,
                 checkpointStrategy,
@@ -494,7 +504,9 @@ public class RocksDBKeyedStateBackendBuilder<K> extends AbstractKeyedStateBacken
 
     private RocksDBRestoreOperation getRocksDBRestoreOperation(
             int keyGroupPrefixBytes,
-            CloseableRegistry cancelStreamRegistry,
+            ResourceGuard rocksDBResourceGuard,
+            CloseableRegistry cancelStreamRegistryForRestore,
+            CloseableRegistry cancelRegistryForBackend,
             LinkedHashMap<String, RocksDBKeyedStateBackend.RocksDbKvStateInfo> kvStateInformation,
             LinkedHashMap<String, HeapPriorityQueueSnapshotRestoreWrapper<?>> registeredPQStates,
             RocksDbTtlCompactFiltersManager ttlCompactFiltersManager) {
@@ -517,7 +529,9 @@ public class RocksDBKeyedStateBackendBuilder<K> extends AbstractKeyedStateBacken
                     keyGroupRange,
                     keyGroupPrefixBytes,
                     numberOfTransferingThreads,
-                    cancelStreamRegistry,
+                    rocksDBResourceGuard,
+                    cancelStreamRegistryForRestore,
+                    cancelRegistryForBackend,
                     userCodeClassLoader,
                     kvStateInformation,
                     keySerializerProvider,
@@ -537,7 +551,8 @@ public class RocksDBKeyedStateBackendBuilder<K> extends AbstractKeyedStateBacken
                     useIngestDbRestoreMode,
                     incrementalRestoreAsyncCompactAfterRescale,
                     rescalingUseDeleteFilesInRange,
-                    ioExecutor);
+                    ioExecutor,
+                    asyncExceptionHandler);
         } else if (priorityQueueConfig.getPriorityQueueStateType()
                 == EmbeddedRocksDBStateBackend.PriorityQueueStateType.HEAP) {
             return new RocksDBHeapTimersFullRestoreOperation<>(
@@ -676,6 +691,12 @@ public class RocksDBKeyedStateBackendBuilder<K> extends AbstractKeyedStateBacken
     public RocksDBKeyedStateBackendBuilder<K> setManualCompactionConfig(
             RocksDBManualCompactionConfig manualCompactionConfig) {
         this.manualCompactionConfig = checkNotNull(manualCompactionConfig);
+        return this;
+    }
+
+    public RocksDBKeyedStateBackendBuilder<K> setAsyncExceptionHandler(
+            AsyncExceptionHandler asyncExceptionHandler) {
+        this.asyncExceptionHandler = asyncExceptionHandler;
         return this;
     }
 }
