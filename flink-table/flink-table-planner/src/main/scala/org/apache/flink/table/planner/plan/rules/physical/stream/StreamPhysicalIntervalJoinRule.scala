@@ -19,7 +19,7 @@ package org.apache.flink.table.planner.plan.rules.physical.stream
 
 import org.apache.flink.table.api.{TableException, ValidationException}
 import org.apache.flink.table.planner.calcite.FlinkTypeFactory.isRowtimeIndicatorType
-import org.apache.flink.table.planner.plan.nodes.FlinkRelNode
+import org.apache.flink.table.planner.plan.nodes.{FlinkConventions, FlinkRelNode}
 import org.apache.flink.table.planner.plan.nodes.logical.FlinkLogicalJoin
 import org.apache.flink.table.planner.plan.nodes.physical.stream.StreamPhysicalIntervalJoin
 import org.apache.flink.table.planner.plan.utils.IntervalJoinUtil.satisfyIntervalJoin

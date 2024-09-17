@@ -271,5 +271,4 @@ class DeduplicateTest extends TableTestBase {
 
     util.verifyExecPlan(sqlQuery)
   }
-
 }
