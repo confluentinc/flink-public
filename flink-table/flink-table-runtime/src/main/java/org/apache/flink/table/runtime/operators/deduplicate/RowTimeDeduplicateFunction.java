@@ -24,7 +24,7 @@ import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 import org.apache.flink.util.Collector;
 
 import static org.apache.flink.table.runtime.operators.deduplicate.DeduplicateFunctionHelper.checkInsertOnly;
-import static org.apache.flink.table.runtime.operators.deduplicate.DeduplicateFunctionHelper.isDuplicate;
+import static org.apache.flink.table.runtime.operators.deduplicate.DeduplicateFunctionHelper.shouldKeepCurrentRow;
 import static org.apache.flink.table.runtime.operators.deduplicate.DeduplicateFunctionHelper.updateDeduplicateResult;
 
 /** This function is used to deduplicate on keys and keeps only first or last row on row time. */
@@ -83,7 +83,7 @@ public class RowTimeDeduplicateFunction
         checkInsertOnly(currentRow);
         RowData preRow = state.value();
 
-        if (isDuplicate(preRow, currentRow, rowtimeIndex, keepLastRow)) {
+        if (shouldKeepCurrentRow(preRow, currentRow, rowtimeIndex, keepLastRow)) {
             updateDeduplicateResult(generateUpdateBefore, generateInsert, preRow, currentRow, out);
             state.update(currentRow);
         }
