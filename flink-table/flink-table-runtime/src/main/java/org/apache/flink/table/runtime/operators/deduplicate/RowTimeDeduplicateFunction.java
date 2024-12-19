@@ -18,7 +18,6 @@
 
 package org.apache.flink.table.runtime.operators.deduplicate;
 
-import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 import org.apache.flink.util.Collector;
@@ -55,37 +54,12 @@ public class RowTimeDeduplicateFunction
     @Override
     public void processElement(RowData input, Context ctx, Collector<RowData> out)
             throws Exception {
-        deduplicateOnRowTime(
-                state, input, out, generateUpdateBefore, generateInsert, rowtimeIndex, keepLastRow);
-    }
-
-    /**
-     * Processes element to deduplicate on keys with row time semantic, sends current element if it
-     * is last or first row, retracts previous element if needed.
-     *
-     * @param state state of function
-     * @param currentRow latest row received by deduplicate function
-     * @param out underlying collector
-     * @param generateUpdateBefore flag to generate UPDATE_BEFORE message or not
-     * @param generateInsert flag to gennerate INSERT message or not
-     * @param rowtimeIndex the index of rowtime field
-     * @param keepLastRow flag to keep last row or keep first row
-     */
-    public static void deduplicateOnRowTime(
-            ValueState<RowData> state,
-            RowData currentRow,
-            Collector<RowData> out,
-            boolean generateUpdateBefore,
-            boolean generateInsert,
-            int rowtimeIndex,
-            boolean keepLastRow)
-            throws Exception {
-        checkInsertOnly(currentRow);
+        checkInsertOnly(input);
         RowData preRow = state.value();
 
-        if (shouldKeepCurrentRow(preRow, currentRow, rowtimeIndex, keepLastRow)) {
-            updateDeduplicateResult(generateUpdateBefore, generateInsert, preRow, currentRow, out);
-            state.update(currentRow);
+        if (shouldKeepCurrentRow(preRow, input, rowtimeIndex, keepLastRow)) {
+            updateDeduplicateResult(generateUpdateBefore, generateInsert, preRow, input, out);
+            state.update(input);
         }
     }
 }
