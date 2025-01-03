@@ -49,6 +49,7 @@ import org.apache.flink.table.runtime.operators.deduplicate.ProcTimeDeduplicateK
 import org.apache.flink.table.runtime.operators.deduplicate.ProcTimeMiniBatchDeduplicateKeepFirstRowFunction;
 import org.apache.flink.table.runtime.operators.deduplicate.ProcTimeMiniBatchDeduplicateKeepLastRowFunction;
 import org.apache.flink.table.runtime.operators.deduplicate.RowTimeDeduplicateFunction;
+import org.apache.flink.table.runtime.operators.deduplicate.RowTimeDeduplicateKeepFirstRowFunction;
 import org.apache.flink.table.runtime.operators.deduplicate.RowTimeMiniBatchDeduplicateFunction;
 import org.apache.flink.table.runtime.operators.deduplicate.RowTimeMiniBatchLatestChangeDeduplicateFunction;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
@@ -68,6 +69,7 @@ import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXE
 import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXEC_DEDUPLICATE_MINIBATCH_COMPACT_CHANGES_ENABLED;
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
+import static org.apache.flink.util.Preconditions.checkState;
 
 /**
  * Stream {@link ExecNode} which deduplicate on keys and keeps only first row or last row. This node
@@ -96,6 +98,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
     public static final String FIELD_NAME_KEEP_LAST_ROW = "keepLastRow";
     public static final String FIELD_NAME_GENERATE_UPDATE_BEFORE = "generateUpdateBefore";
     public static final String STATE_NAME = "deduplicateState";
+    public static final String FIELD_NAME_OUTPUT_INSERT_ONLY = "outputInsertOnly";
 
     @JsonProperty(FIELD_NAME_UNIQUE_KEYS)
     private final int[] uniqueKeys;
@@ -114,11 +117,23 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private final List<StateMetadata> stateMetadataList;
 
+    /**
+     * For backward compatibility, if plan was generated without insert-only requirement, insertOnly
+     * will be absent in the json (null) and we interpret that as false to use old code path and
+     * avoid a problematic migration from {@link RowTimeDeduplicateFunction} to {@link
+     * RowTimeDeduplicateKeepFirstRowFunction}.
+     */
+    @Nullable
+    @JsonProperty(FIELD_NAME_OUTPUT_INSERT_ONLY)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private final Boolean outputInsertOnly;
+
     public StreamExecDeduplicate(
             ReadableConfig tableConfig,
             int[] uniqueKeys,
             boolean isRowtime,
             boolean keepLastRow,
+            boolean outputInsertOnly,
             boolean generateUpdateBefore,
             InputProperty inputProperty,
             RowType outputType,
@@ -130,6 +145,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
                 uniqueKeys,
                 isRowtime,
                 keepLastRow,
+                outputInsertOnly,
                 generateUpdateBefore,
                 StateMetadata.getOneInputOperatorDefaultMeta(tableConfig, STATE_NAME),
                 Collections.singletonList(inputProperty),
@@ -145,6 +161,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
             @JsonProperty(FIELD_NAME_UNIQUE_KEYS) int[] uniqueKeys,
             @JsonProperty(FIELD_NAME_IS_ROWTIME) boolean isRowtime,
             @JsonProperty(FIELD_NAME_KEEP_LAST_ROW) boolean keepLastRow,
+            @Nullable @JsonProperty(FIELD_NAME_OUTPUT_INSERT_ONLY) Boolean outputInsertOnly,
             @JsonProperty(FIELD_NAME_GENERATE_UPDATE_BEFORE) boolean generateUpdateBefore,
             @Nullable @JsonProperty(FIELD_NAME_STATE) List<StateMetadata> stateMetadataList,
             @JsonProperty(FIELD_NAME_INPUT_PROPERTIES) List<InputProperty> inputProperties,
@@ -155,6 +172,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
         this.uniqueKeys = checkNotNull(uniqueKeys);
         this.isRowtime = isRowtime;
         this.keepLastRow = keepLastRow;
+        this.outputInsertOnly = outputInsertOnly == null ? false : outputInsertOnly;
         this.generateUpdateBefore = generateUpdateBefore;
         this.stateMetadataList = stateMetadataList;
     }
@@ -185,6 +203,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
                                     rowSerializer,
                                     inputRowType,
                                     keepLastRow,
+                                    outputInsertOnly,
                                     generateUpdateBefore,
                                     stateRetentionTime)
                             .createDeduplicateOperator();
@@ -222,7 +241,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
 
     /** Base translator to create deduplicate operator. */
     private abstract static class DeduplicateOperatorTranslator {
-        private final ReadableConfig config;
+        protected final ReadableConfig config;
         protected final InternalTypeInfo<RowData> rowTypeInfo;
         protected final TypeSerializer<RowData> typeSerializer;
         protected final boolean keepLastRow;
@@ -249,7 +268,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
         }
 
         protected boolean isMiniBatchEnabled() {
-            return config.get(ExecutionConfigOptions.TABLE_EXEC_MINIBATCH_ENABLED);
+            return StreamExecDeduplicate.isMiniBatchEnabled(config);
         }
 
         protected boolean isCompactChanges() {
@@ -277,6 +296,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
             extends DeduplicateOperatorTranslator {
 
         private final RowType inputRowType;
+        private final boolean outputInsertOnly;
 
         protected RowtimeDeduplicateOperatorTranslator(
                 ReadableConfig config,
@@ -284,6 +304,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
                 TypeSerializer<RowData> typeSerializer,
                 RowType inputRowType,
                 boolean keepLastRow,
+                boolean outputInsertOnly,
                 boolean generateUpdateBefore,
                 long stateRetentionTime) {
             super(
@@ -293,6 +314,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
                     keepLastRow,
                     generateUpdateBefore,
                     stateRetentionTime);
+            this.outputInsertOnly = outputInsertOnly;
             this.inputRowType = inputRowType;
         }
 
@@ -307,6 +329,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
             }
             checkArgument(rowtimeIndex >= 0);
             if (isMiniBatchEnabled()) {
+                checkState(!canBeInsertOnly(config, keepLastRow));
                 CountBundleTrigger<RowData> trigger = new CountBundleTrigger<>(getMiniBatchSize());
                 if (isCompactChanges()) {
                     return new KeyedMapBundleOperator<>(
@@ -332,15 +355,21 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
                             trigger);
                 }
             } else {
-                RowTimeDeduplicateFunction processFunction =
-                        new RowTimeDeduplicateFunction(
-                                rowTypeInfo,
-                                stateRetentionTime,
-                                rowtimeIndex,
-                                generateUpdateBefore,
-                                generateInsert(),
-                                keepLastRow);
-                return new KeyedProcessOperator<>(processFunction);
+                if (!keepLastRow && outputInsertOnly) {
+                    checkState(canBeInsertOnly(config, keepLastRow));
+                    return new KeyedProcessOperator<>(
+                            new RowTimeDeduplicateKeepFirstRowFunction(
+                                    rowTypeInfo, stateRetentionTime, rowtimeIndex));
+                } else {
+                    return new KeyedProcessOperator<>(
+                            new RowTimeDeduplicateFunction(
+                                    rowTypeInfo,
+                                    stateRetentionTime,
+                                    rowtimeIndex,
+                                    generateUpdateBefore,
+                                    generateInsert(),
+                                    keepLastRow));
+                }
             }
         }
     }
@@ -374,6 +403,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
         @Override
         OneInputStreamOperator<RowData, RowData> createDeduplicateOperator() {
             if (isMiniBatchEnabled()) {
+                checkState(!canBeInsertOnly(config, keepLastRow));
                 CountBundleTrigger<RowData> trigger = new CountBundleTrigger<>(getMiniBatchSize());
                 if (keepLastRow) {
                     ProcTimeMiniBatchDeduplicateKeepLastRowFunction processFunction =
@@ -394,6 +424,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
                 }
             } else {
                 if (keepLastRow) {
+                    checkState(!canBeInsertOnly(config, keepLastRow));
                     ProcTimeDeduplicateKeepLastRowFunction processFunction =
                             new ProcTimeDeduplicateKeepLastRowFunction(
                                     rowTypeInfo,
@@ -404,11 +435,27 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
                                     generatedEqualiser);
                     return new KeyedProcessOperator<>(processFunction);
                 } else {
+                    checkState(canBeInsertOnly(config, keepLastRow));
                     ProcTimeDeduplicateKeepFirstRowFunction processFunction =
                             new ProcTimeDeduplicateKeepFirstRowFunction(stateRetentionTime);
                     return new KeyedProcessOperator<>(processFunction);
                 }
             }
         }
+    }
+
+    /**
+     * Currently, append-only is not supported for mini-batch mode, however this could be supported
+     * in the future. Proctime keep first row mini-batch operators are already append-only.
+     *
+     * <p>keepLastRow can not support append only, as always more recent record will be retracting
+     * the previous one.
+     */
+    public static boolean canBeInsertOnly(ReadableConfig config, boolean keepLastRow) {
+        return !keepLastRow && !isMiniBatchEnabled(config);
+    }
+
+    private static boolean isMiniBatchEnabled(ReadableConfig config) {
+        return config.get(ExecutionConfigOptions.TABLE_EXEC_MINIBATCH_ENABLED);
     }
 }

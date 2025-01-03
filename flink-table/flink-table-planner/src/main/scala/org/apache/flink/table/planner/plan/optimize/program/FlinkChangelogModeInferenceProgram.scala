@@ -26,6 +26,7 @@ import org.apache.flink.table.connector.ChangelogMode
 import org.apache.flink.table.planner.plan.`trait`._
 import org.apache.flink.table.planner.plan.`trait`.UpdateKindTrait.{beforeAfterOrNone, onlyAfterOrNone, BEFORE_AND_AFTER, ONLY_UPDATE_AFTER}
 import org.apache.flink.table.planner.plan.metadata.FlinkRelMetadataQuery
+import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecDeduplicate
 import org.apache.flink.table.planner.plan.nodes.physical.stream._
 import org.apache.flink.table.planner.plan.utils._
 import org.apache.flink.table.planner.plan.utils.RankProcessStrategy.{AppendFastStrategy, RetractStrategy, UpdateFastStrategy}
@@ -220,6 +221,38 @@ class FlinkChangelogModeInferenceProgram extends FlinkOptimizeProgram[StreamOpti
         val providedTrait = ModifyKindSetTrait.INSERT_ONLY
         createNewNode(rel, children, providedTrait, requiredTrait, requester)
 
+      case rank: StreamPhysicalRank if RankUtil.isDeduplication(rank) =>
+        val children = visitChildren(rel, ModifyKindSetTrait.ALL_CHANGES)
+        val tableConfig = unwrapTableConfig(rank)
+
+        // if the rank is deduplication and can be executed as insert-only, forward that information
+        val insertOnly = children
+          .filterNot(
+            rel => {
+              rel.getTraitSet.contains(ModifyKindSetTrait.INSERT_ONLY)
+            })
+          .isEmpty
+
+        val providedTrait = {
+          if (
+            insertOnly && StreamExecDeduplicate.canBeInsertOnly(
+              tableConfig,
+              RankUtil.keepLastDeduplicateRow(rank.orderKey))
+          ) {
+            // Deduplicate outputs append only if first row is kept and mini batching is disabled
+            ModifyKindSetTrait.INSERT_ONLY
+          } else {
+            ModifyKindSetTrait.ALL_CHANGES
+          }
+        }
+
+        createNewNode(rel, children, providedTrait, requiredTrait, requester)
+
+      case rank: StreamPhysicalRank if !RankUtil.isDeduplication(rank) =>
+        // Rank supports consuming all changes
+        val children = visitChildren(rel, ModifyKindSetTrait.ALL_CHANGES)
+        createNewNode(rel, children, ModifyKindSetTrait.ALL_CHANGES, requiredTrait, requester)
+
       case limit: StreamPhysicalLimit =>
         // limit support all changes in input
         val children = visitChildren(limit, ModifyKindSetTrait.ALL_CHANGES)
@@ -230,8 +263,8 @@ class FlinkChangelogModeInferenceProgram extends FlinkOptimizeProgram[StreamOpti
         }
         createNewNode(limit, children, providedTrait, requiredTrait, requester)
 
-      case _: StreamPhysicalRank | _: StreamPhysicalSortLimit =>
-        // Rank and SortLimit supports consuming all changes
+      case _: StreamPhysicalSortLimit =>
+        // SortLimit supports consuming all changes
         val children = visitChildren(rel, ModifyKindSetTrait.ALL_CHANGES)
         createNewNode(rel, children, ModifyKindSetTrait.ALL_CHANGES, requiredTrait, requester)
 

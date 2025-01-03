@@ -139,14 +139,17 @@ class DeduplicateTest extends TableTestBase {
 
   @Test
   def testSimpleFirstRowOnRowtime(): Unit = {
+    // indirectly check output insert only via used SUM or SUM_RETRACT aggregation function
     val sql =
       """
-        |SELECT a, b, c
-        |FROM (
-        |  SELECT *,
-        |      ROW_NUMBER() OVER (PARTITION BY a ORDER BY rowtime ASC) as rank_num
-        |  FROM MyTable)
-        |WHERE rank_num <= 1
+        |SELECT sum(a), b, sum(c) FROM (
+        |  SELECT a, b, c
+        |  FROM (
+        |    SELECT *,
+        |        ROW_NUMBER() OVER (PARTITION BY a ORDER BY rowtime ASC) as rank_num
+        |    FROM MyTable)
+        |  WHERE rank_num <= 1)
+        |GROUP BY b
       """.stripMargin
 
     util.verifyExecPlan(sql)
@@ -188,14 +191,17 @@ class DeduplicateTest extends TableTestBase {
 
   @Test
   def testSimpleLastRowOnRowtime(): Unit = {
+    // indirectly check output insert only via used SUM or SUM_RETRACT aggregation function
     val sql =
       """
-        |SELECT a, b, c
-        |FROM (
-        |  SELECT *,
-        |      ROW_NUMBER() OVER (PARTITION BY a ORDER BY rowtime DESC) as rank_num
-        |  FROM MyTable)
-        |WHERE rank_num = 1
+        |SELECT sum(a), b, sum(c) FROM (
+        |  SELECT a, b, c
+        |  FROM (
+        |    SELECT *,
+        |        ROW_NUMBER() OVER (PARTITION BY a ORDER BY rowtime DESC) as rank_num
+        |    FROM MyTable)
+        |  WHERE rank_num = 1)
+        |GROUP BY b
       """.stripMargin
 
     util.verifyExecPlan(sql)
@@ -237,14 +243,17 @@ class DeduplicateTest extends TableTestBase {
 
   @Test
   def testSimpleLastRowOnProctime(): Unit = {
+    // indirectly check output insert only via used SUM or SUM_RETRACT aggregation function
     val sql =
       """
-        |SELECT *
-        |FROM (
-        |  SELECT *,
-        |      ROW_NUMBER() OVER (PARTITION BY a ORDER BY proctime DESC) as rank_num
-        |  FROM MyTable)
-        |WHERE rank_num = 1
+        |SELECT sum(a), b, sum(c) FROM (
+        |  SELECT a, b, c
+        |  FROM (
+        |    SELECT *,
+        |        ROW_NUMBER() OVER (PARTITION BY a ORDER BY proctime DESC) as rank_num
+        |    FROM MyTable)
+        |  WHERE rank_num = 1)
+        |GROUP BY b
       """.stripMargin
 
     util.verifyExecPlan(sql)
@@ -268,14 +277,17 @@ class DeduplicateTest extends TableTestBase {
 
   @Test
   def testSimpleFirstRowOnProctime(): Unit = {
+    // indirectly check output insert only via used SUM or SUM_RETRACT aggregation function
     val sql =
       """
-        |SELECT a, b, c
-        |FROM (
-        |  SELECT *,
-        |      ROW_NUMBER() OVER (PARTITION BY a ORDER BY proctime ASC) as rank_num
-        |  FROM MyTable)
-        |WHERE rank_num = 1
+        |SELECT sum(a), b, sum(c) FROM (
+        |  SELECT a, b, c
+        |  FROM (
+        |    SELECT *,
+        |        ROW_NUMBER() OVER (PARTITION BY a ORDER BY proctime ASC) as rank_num
+        |    FROM MyTable)
+        |  WHERE rank_num = 1)
+        |GROUP BY b
       """.stripMargin
 
     util.verifyExecPlan(sql)
