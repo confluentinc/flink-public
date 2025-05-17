@@ -23,7 +23,7 @@ under the License.
 	<parent>
 		<groupId>org.apache.flink</groupId>
 		<artifactId>flink-table</artifactId>
-		<version>2.0-SNAPSHOT</version>
+		<version>2.0.0</version>
 	</parent>
 
 	<artifactId>flink-sql-client</artifactId>
@@ -78,14 +78,14 @@ under the License.
 		<dependency>
 			<groupId>org.jline</groupId>
 			<artifactId>jline-terminal</artifactId>
-			<version>3.21.0</version>
+			<version>3.30.1</version>
 			<optional>${flink.markBundledAsOptional}</optional>
 		</dependency>
 
 		<dependency>
 			<groupId>org.jline</groupId>
 			<artifactId>jline-reader</artifactId>
-			<version>3.21.0</version>
+			<version>3.30.1</version>
 			<optional>${flink.markBundledAsOptional}</optional>
 		</dependency>
 
@@ -221,14 +221,14 @@ under the License.
 				<!-- dependency convergence -->
 				<groupId>commons-beanutils</groupId>
 				<artifactId>commons-beanutils</artifactId>
-				<version>1.9.4</version>
+				<version>1.10.1</version>
 				<scope>test</scope>
 			</dependency>
 			<dependency>
 				<!-- dependency convergence -->
 				<groupId>org.codehaus.woodstox</groupId>
 				<artifactId>stax2-api</artifactId>
-				<version>4.2.1</version>
+				<version>4.2.2</version>
 				<scope>test</scope>
 			</dependency>
 		</dependencies>

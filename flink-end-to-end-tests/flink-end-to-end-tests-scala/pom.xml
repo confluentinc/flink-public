@@ -33,7 +33,7 @@ under the License.
 		<!-- Use an old version that is not actively supported by Flink.
 		 	2.11 still 'just works' with our current maven setup,
 		 	and going forward we won't add support for it again.-->
-		<scala.version>2.11.12</scala.version>
+		<scala.version>2.13.16</scala.version>
 	</properties>
 
 	<dependencies>

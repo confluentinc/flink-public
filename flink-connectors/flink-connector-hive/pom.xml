@@ -26,7 +26,7 @@ under the License.
 	<parent>
 		<groupId>org.apache.flink</groupId>
 		<artifactId>flink-connectors</artifactId>
-		<version>2.0-SNAPSHOT</version>
+		<version>2.0.0</version>
 	</parent>
 
 	<artifactId>flink-connector-hive_${scala.binary.version}</artifactId>
@@ -35,8 +35,8 @@ under the License.
 	<packaging>jar</packaging>
 
 	<properties>
-		<hiverunner.version>4.0.0</hiverunner.version>
-		<reflections.version>0.9.8</reflections.version>
+		<hiverunner.version>4.1.0</hiverunner.version>
+		<reflections.version>0.10.2</reflections.version>
 		<derby.version>10.10.2.0</derby.version>
 		<hive.avro.version>1.8.2</hive.avro.version>
 		<!--
@@ -1178,7 +1178,7 @@ under the License.
 			<plugin>
 				<groupId>org.antlr</groupId>
 				<artifactId>antlr3-maven-plugin</artifactId>
-				<version>3.5.2</version>
+				<version>3.5.3</version>
 				<executions>
 					<execution>
 						<goals>
@@ -1320,7 +1320,7 @@ under the License.
 					<!-- Bump arrow netty dependency -->
 					<groupId>io.netty</groupId>
 					<artifactId>netty-buffer</artifactId>
-					<version>4.1.46.Final</version>
+					<version>4.2.1.Final</version>
 					<scope>provided</scope>
 				</dependency>
 
