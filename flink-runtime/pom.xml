@@ -219,7 +219,7 @@ under the License.
 		<dependency>
 			<groupId>tools.profiler</groupId>
 			<artifactId>async-profiler</artifactId>
-			<version>2.9</version>
+			<version>4.0</version>
 		</dependency>
 
 		<!-- Lz4 compression library -->
