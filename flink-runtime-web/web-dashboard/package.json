@@ -59,7 +59,7 @@
     "eslint-plugin-prefer-arrow": "^1.2.3",
     "eslint-plugin-prettier": "^4.0.0",
     "eslint-plugin-unused-imports": "^2.0.0",
-    "jasmine-core": "^4.0.0",
+    "jasmine-core": "^5.0.0",
     "jasmine-spec-reporter": "^7.0.0",
     "karma": "~6.3.14",
     "karma-chrome-launcher": "~3.1.0",
