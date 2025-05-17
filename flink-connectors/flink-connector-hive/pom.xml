@@ -35,7 +35,7 @@ under the License.
 	<packaging>jar</packaging>
 
 	<properties>
-		<hiverunner.version>4.0.0</hiverunner.version>
+		<hiverunner.version>6.0.1</hiverunner.version>
 		<reflections.version>0.9.8</reflections.version>
 		<derby.version>10.10.2.0</derby.version>
 		<hive.avro.version>1.8.2</hive.avro.version>
