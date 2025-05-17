@@ -1514,7 +1514,7 @@ under the License.
 						<plugin>
 							<groupId>org.apache.maven.plugins</groupId>
 							<artifactId>maven-release-plugin</artifactId>
-							<version>2.1</version>
+							<version>3.1.1</version>
 							<configuration>
 								<mavenExecutorId>forked-path</mavenExecutorId>
 								<useReleaseProfile>false</useReleaseProfile>
