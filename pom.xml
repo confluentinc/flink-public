@@ -657,7 +657,7 @@ under the License.
 					(the package names are identical!) -->
 				<groupId>jakarta.xml.bind</groupId>
 				<artifactId>jakarta.xml.bind-api</artifactId>
-				<version>2.3.2</version>
+				<version>4.0.2</version>
 				<scope>provided</scope>
 			</dependency>
 
