@@ -100,7 +100,7 @@ under the License.
 		<dependency>
 			<groupId>org.snakeyaml</groupId>
 			<artifactId>snakeyaml-engine</artifactId>
-			<version>2.6</version>
+			<version>3.0</version>
 		</dependency>
 
 		<!-- standard utilities -->
