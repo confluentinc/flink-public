@@ -531,7 +531,7 @@ under the License.
 					<plugin>
 						<groupId>org.codehaus.mojo</groupId>
 						<artifactId>exec-maven-plugin</artifactId>
-						<version>1.5.0</version>
+						<version>3.5.0</version>
 						<executions>
 							<execution>
 								<id>remove-build-target-link</id>
