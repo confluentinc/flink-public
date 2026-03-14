@@ -39,7 +39,7 @@ under the License.
 	<properties>
 		<pekko.version>1.0.1</pekko.version>
 		<scala.binary.version>2.12</scala.binary.version>
-		<scala.version>2.12.16</scala.version>
+		<scala.version>3.8.0</scala.version>
 	</properties>
 
 	<dependencies>
