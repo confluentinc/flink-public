@@ -40,7 +40,7 @@ under the License.
 			<extension>
 				<groupId>org.apache.maven.archetype</groupId>
 				<artifactId>archetype-packaging</artifactId>
-				<version>2.2</version>
+				<version>3.4.0</version>
 			</extension>
 		</extensions>
 		<pluginManagement>
