@@ -72,6 +72,13 @@ public class InternalTimerServiceImpl<K, N> implements InternalTimerService<N> {
     protected long currentWatermark = Long.MIN_VALUE;
 
     /**
+     * Unlike {@link #currentWatermark}, which is set to the requested target before firing starts,
+     * this only advances as event-time timers actually finish firing, so it is safe to expose even
+     * if {@link #tryAdvanceWatermark} is interrupted before reaching its requested target.
+     */
+    private long reachedWatermark = Long.MIN_VALUE;
+
+    /**
      * The one and only Future (if any) registered to execute the next {@link Triggerable} action,
      * when its (processing) time arrives.
      */
@@ -229,6 +236,10 @@ public class InternalTimerServiceImpl<K, N> implements InternalTimerService<N> {
         this.currentWatermark = watermark;
     }
 
+    long getReachedWatermark() {
+        return reachedWatermark;
+    }
+
     @Override
     public void registerProcessingTimeTimer(N namespace, long time) {
         InternalTimer<K, N> oldHead = processingTimeTimersQueue.peek();
@@ -339,9 +350,17 @@ public class InternalTimerServiceImpl<K, N> implements InternalTimerService<N> {
             eventTimeTimersQueue.poll();
             triggerTarget.onEventTime(timer);
             taskIOMetricGroup.getNumFiredTimers().inc();
+            // Other timers due at exactly this timestamp may still be unfired, so only claim
+            // progress strictly below it.
+            reachedWatermark = timer.getTimestamp() - 1;
             // Check if we should stop advancing after at least one iteration to guarantee progress
             // and prevent a potential starvation.
             interrupted = shouldStopAdvancingFn.test();
+        }
+        if (!interrupted) {
+            // Fully drained: nothing due at or below time remains, regardless of the last fired
+            // timer's timestamp.
+            reachedWatermark = time;
         }
         return !interrupted;
     }

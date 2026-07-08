@@ -183,6 +183,12 @@
             <td>Allows unaligned checkpoints to skip timers that are currently being fired. For this feature to be enabled, it must be also supported by the operator. Currently this is supported by all TableStreamOperators and CepOperator.</td>
         </tr>
         <tr>
+            <td><h5>execution.checkpointing.unaligned.interruptible-timers.intermediate-watermark-interval</h5></td>
+            <td style="word-wrap: break-word;">5 s</td>
+            <td>Duration</td>
+            <td>When interruptible timers are enabled and firing due timers for a watermark advance is interrupted before completing, an intermediate watermark reflecting the progress made so far is emitted at most this often, so that downstream operators are not starved of watermark progress during a long-running catch-up. Set to 0 to disable intermediate watermark emission.</td>
+        </tr>
+        <tr>
             <td><h5>execution.checkpointing.unaligned.max-subtasks-per-channel-state-file</h5></td>
             <td style="word-wrap: break-word;">5</td>
             <td>Integer</td>

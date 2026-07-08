@@ -107,6 +107,11 @@ class MailboxWatermarkProcessorTest {
         }
 
         @Override
+        public long getReachedWatermark() {
+            return Long.MIN_VALUE;
+        }
+
+        @Override
         public void snapshotToRawKeyedState(
                 KeyedStateCheckpointOutputStream stateCheckpointOutputStream, String operatorName)
                 throws Exception {

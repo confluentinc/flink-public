@@ -611,6 +611,27 @@ public class CheckpointingOptions {
                                     + " For this feature to be enabled, it must be also supported by the operator."
                                     + " Currently this is supported by all TableStreamOperators and CepOperator.");
 
+    /**
+     * Controls how often an intermediate watermark is emitted while a watermark advance is
+     * interrupted before completing (see {@link #ENABLE_UNALIGNED_INTERRUPTIBLE_TIMERS}). Has no
+     * effect unless interruptible timers are enabled. A value of {@code 0} disables intermediate
+     * watermark emission entirely.
+     */
+    @Experimental
+    public static final ConfigOption<Duration>
+            UNALIGNED_INTERRUPTIBLE_TIMERS_INTERMEDIATE_WATERMARK_INTERVAL =
+                    ConfigOptions.key(
+                                    "execution.checkpointing.unaligned.interruptible-timers.intermediate-watermark-interval")
+                            .durationType()
+                            .defaultValue(Duration.ofSeconds(5))
+                            .withDescription(
+                                    "When interruptible timers are enabled and firing due timers for a watermark"
+                                            + " advance is interrupted before completing, an intermediate watermark"
+                                            + " reflecting the progress made so far is emitted at most this often, so"
+                                            + " that downstream operators are not starved of watermark progress"
+                                            + " during a long-running catch-up. Set to 0 to disable intermediate"
+                                            + " watermark emission.");
+
     public static final ConfigOption<Boolean> ENABLE_CHECKPOINTS_AFTER_TASKS_FINISH =
             ConfigOptions.key("execution.checkpointing.checkpoints-after-tasks-finish")
                     .booleanType()

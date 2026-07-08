@@ -395,9 +395,15 @@ public abstract class AbstractStreamOperator<OUT>
                 && areInterruptibleTimersConfigured()
                 && getTimeServiceManager().isPresent()) {
             LOG.info("Interruptible timers enabled for {}", getClass().getSimpleName());
+            InternalTimeServiceManager<?> timeServiceManager = getTimeServiceManager().get();
+            timeServiceManager.configureIntermediateWatermarkInterval(
+                    getContainingTask()
+                            .getJobConfiguration()
+                            .get(
+                                    CheckpointingOptions
+                                            .UNALIGNED_INTERRUPTIBLE_TIMERS_INTERMEDIATE_WATERMARK_INTERVAL));
             this.watermarkProcessor =
-                    new MailboxWatermarkProcessor(
-                            output, mailboxExecutor, getTimeServiceManager().get());
+                    new MailboxWatermarkProcessor(output, mailboxExecutor, timeServiceManager);
         }
     }
 
