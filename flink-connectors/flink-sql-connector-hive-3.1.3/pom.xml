@@ -49,7 +49,7 @@ under the License.
 		<dependency>
 			<groupId>org.apache.hive</groupId>
 			<artifactId>hive-exec</artifactId>
-			<version>4.0.1</version>
+			<version>4.2.0</version>
 			<optional>${flink.markBundledAsOptional}</optional>
 			<exclusions>
 				<exclusion>
@@ -83,7 +83,7 @@ under the License.
 		<dependency>
 			<groupId>org.antlr</groupId>
 			<artifactId>antlr-runtime</artifactId>
-			<version>3.5.2</version>
+			<version>3.5.3</version>
 			<optional>${flink.markBundledAsOptional}</optional>
 		</dependency>
 
@@ -91,7 +91,7 @@ under the License.
 		<dependency>
 			<groupId>org.apache.hadoop</groupId>
 			<artifactId>hadoop-mapreduce-client-core</artifactId>
-			<version>3.1.0</version>
+			<version>3.5.0</version>
 			<scope>provided</scope>
 			<exclusions>
 				<exclusion>
@@ -132,7 +132,7 @@ under the License.
 		<dependency>
 			<groupId>org.apache.avro</groupId>
 			<artifactId>avro</artifactId>
-			<version>1.11.5</version>
+			<version>1.12.1</version>
 			<optional>${flink.markBundledAsOptional}</optional>
 		</dependency>
 
@@ -140,7 +140,7 @@ under the License.
 			<groupId>org.apache.avro</groupId>
 			<artifactId>avro-mapred</artifactId>
 			<classifier>hadoop2</classifier>
-			<version>1.8.2</version>
+			<version>1.12.1</version>
 			<optional>${flink.markBundledAsOptional}</optional>
 			<exclusions>
 				<exclusion>

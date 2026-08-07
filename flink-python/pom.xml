@@ -126,7 +126,7 @@ under the License.
 		<dependency>
 			<groupId>com.alibaba</groupId>
 			<artifactId>pemja</artifactId>
-			<version>0.4.1</version>
+			<version>0.6.1</version>
 			<optional>${flink.markBundledAsOptional}</optional>
 		</dependency>
 
@@ -148,7 +148,7 @@ under the License.
 		<dependency>
 			<groupId>net.razorvine</groupId>
 			<artifactId>pyrolite</artifactId>
-			<version>4.13</version>
+			<version>4.30</version>
 			<optional>${flink.markBundledAsOptional}</optional>
 			<exclusions>
 				<exclusion>
@@ -410,7 +410,7 @@ under the License.
 			<dependency>
 				<groupId>org.conscrypt</groupId>
 				<artifactId>conscrypt-openjdk-uber</artifactId>
-				<version>2.5.1</version>
+				<version>2.6.1</version>
 				<scope>runtime</scope>
 			</dependency>
 		</dependencies>
