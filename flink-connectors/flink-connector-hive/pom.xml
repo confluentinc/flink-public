@@ -35,16 +35,16 @@ under the License.
 	<packaging>jar</packaging>
 
 	<properties>
-		<hiverunner.version>4.0.0</hiverunner.version>
-		<reflections.version>0.9.8</reflections.version>
+		<hiverunner.version>4.1.0</hiverunner.version>
+		<reflections.version>0.10.2</reflections.version>
 		<derby.version>10.17.1.0</derby.version>
-		<hive.avro.version>1.11.5</hive.avro.version>
+		<hive.avro.version>1.12.1</hive.avro.version>
 		<!--
 		Hive requires Hadoop 2 to avoid
 		java.lang.NoClassDefFoundError: org/apache/hadoop/metrics/Updater errors
 		Using this dedicated property avoids CI failures with the Hadoop 3 profile
 		-->
-		<hive.hadoop.version>3.4.0</hive.hadoop.version>
+		<hive.hadoop.version>3.5.0</hive.hadoop.version>
 	</properties>
 
 	<dependencyManagement>
@@ -1178,7 +1178,7 @@ under the License.
 			<plugin>
 				<groupId>org.antlr</groupId>
 				<artifactId>antlr3-maven-plugin</artifactId>
-				<version>3.5.2</version>
+				<version>3.5.3</version>
 				<executions>
 					<execution>
 						<goals>
@@ -1320,7 +1320,7 @@ under the License.
 					<!-- Bump arrow netty dependency -->
 					<groupId>io.netty</groupId>
 					<artifactId>netty-buffer</artifactId>
-					<version>4.1.46.Final</version>
+					<version>4.2.16.Final</version>
 					<scope>provided</scope>
 				</dependency>
 
@@ -1328,7 +1328,7 @@ under the License.
 					<!-- Bump arrow netty dependency -->
 					<groupId>io.netty</groupId>
 					<artifactId>netty-common</artifactId>
-					<version>4.1.118.Final</version>
+					<version>4.2.16.Final</version>
 					<scope>provided</scope>
 				</dependency>
 			</dependencies>
