@@ -479,7 +479,7 @@ under the License.
 		<dependency>
 			<groupId>com.google.code.findbugs</groupId>
 			<artifactId>jsr305</artifactId>
-			<version>1.3.9</version>
+			<version>3.0.2</version>
 			<optional>${flink.markBundledAsOptional}</optional>
 		</dependency>
 
