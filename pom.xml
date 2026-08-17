@@ -759,7 +759,7 @@ under the License.
 			<dependency>
 				<groupId>org.joda</groupId>
 				<artifactId>joda-convert</artifactId>
-				<version>1.7</version>
+				<version>3.0.1</version>
 			</dependency>
 
 			<!-- kryo used in different versions by Flink an chill -->
