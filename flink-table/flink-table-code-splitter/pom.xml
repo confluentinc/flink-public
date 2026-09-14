@@ -37,7 +37,7 @@ under the License.
 	<packaging>jar</packaging>
 
 	<properties>
-		<antlr4.version>4.7</antlr4.version>
+		<antlr4.version>4.13.2</antlr4.version>
 		<!-- override parent pom -->
 		<test.excludedGroups/>
 	</properties>
