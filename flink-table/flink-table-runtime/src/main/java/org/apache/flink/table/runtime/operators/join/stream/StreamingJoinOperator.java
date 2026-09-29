@@ -354,7 +354,8 @@ public class StreamingJoinOperator extends AbstractStreamingJoinOperator {
             throws Exception {
         final boolean otherIsOuter = isLeft ? rightIsOuter : leftIsOuter;
         final JoinInputSideSpec inputSideSpec = isLeft ? leftInputSideSpec : rightInputSideSpec;
-        // TODO FLINK-40841: assumes the replaced record had the same matches, not true for non-equi
+        // a replaced record has the same matches, as updates without UPDATE_BEFORE are only
+        // allowed if the non-equi condition reads unique key columns only
         return otherIsOuter
                 && (isSuppress
                         || (!inputSideSpec.joinKeyContainsUniqueKey()

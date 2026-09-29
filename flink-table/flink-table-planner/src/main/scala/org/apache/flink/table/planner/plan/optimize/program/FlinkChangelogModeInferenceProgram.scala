@@ -726,7 +726,7 @@ class FlinkChangelogModeInferenceProgram extends FlinkOptimizeProgram[StreamOpti
           val children = join.getInputs.zipWithIndex.map {
             case (child, childOrdinal) =>
               val physicalChild = child.asInstanceOf[StreamPhysicalRel]
-              val supportOnlyAfter = join.inputUniqueKeyContainsJoinKey(childOrdinal)
+              val supportOnlyAfter = join.inputSupportsChangesByKey(childOrdinal)
               val inputModifyKindSet = getModifyKindSet(physicalChild)
               if (onlyAfterByParent) {
                 if (inputModifyKindSet.contains(ModifyKind.UPDATE) && !supportOnlyAfter) {
@@ -1410,7 +1410,7 @@ class FlinkChangelogModeInferenceProgram extends FlinkOptimizeProgram[StreamOpti
           val children = join.getInputs.zipWithIndex.map {
             case (child, childOrdinal) =>
               val physicalChild = child.asInstanceOf[StreamPhysicalRel]
-              val supportsDeleteByKey = join.inputUniqueKeyContainsJoinKey(childOrdinal)
+              val supportsDeleteByKey = join.inputSupportsChangesByKey(childOrdinal)
               val inputModifyKindSet = getModifyKindSet(physicalChild)
               if (supportsDeleteByKey && requiredTrait == DELETE_BY_KEY) {
                 this

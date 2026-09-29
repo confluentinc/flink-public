@@ -390,8 +390,8 @@ public class StreamPhysicalMultiJoin extends AbstractRelNode implements StreamPh
      * retracted. Therefore, if we want to ignore UPDATE_BEFORE, the unique key must contain join
      * key.
      *
-     * <p>This is similar to {@link StreamPhysicalJoin#inputUniqueKeyContainsJoinKey(int)} but here
-     * we use the common join key, since the multi join operator partitions on the common join key.
+     * <p>This is similar to {@link StreamPhysicalJoin#inputSupportsChangesByKey(int)} but here we
+     * use the common join key, since the multi join operator partitions on the common join key.
      */
     public boolean inputUniqueKeyContainsCommonJoinKey(int inputId) {
         final RelNode input = getInputs().get(inputId);

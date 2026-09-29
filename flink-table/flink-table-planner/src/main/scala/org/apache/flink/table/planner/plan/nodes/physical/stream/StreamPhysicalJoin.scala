@@ -65,17 +65,29 @@ class StreamPhysicalJoin(
    * If the UPDATE_BEFORE is ignored, the `+I(1001, Tim, 10)` record in join will never be
    * retracted. Therefore, if we want to ignore UPDATE_BEFORE, the unique key must contain join key.
    *
+   * The unique key must also contain all columns of the input that the non-equi condition reads.
+   * Otherwise, the old and the new version of a row may match different rows of the other side, and
+   * only the UPDATE_BEFORE retracts the rows that the old version matched.
+   *
    * @see
    *   FlinkChangelogModeInferenceProgram
    */
-  def inputUniqueKeyContainsJoinKey(inputOrdinal: Int): Boolean = {
-    val input = getInput(inputOrdinal)
+  def inputSupportsChangesByKey(inputOrdinal: Int): Boolean = {
     val joinKeys = if (inputOrdinal == 0) joinSpec.getLeftKeys else joinSpec.getRightKeys
-    val inputUniqueKeys = getUpsertKeys(input, joinKeys)
-    if (inputUniqueKeys != null) {
-      inputUniqueKeys.exists(uniqueKey => joinKeys.forall(uniqueKey.contains(_)))
+    val keyColumns = joinKeys ++ nonEquiConditionColumns(inputOrdinal)
+    getUpsertKeys(getInput(inputOrdinal), joinKeys).exists(
+      upsertKey => keyColumns.forall(upsertKey.contains(_)))
+  }
+
+  private def nonEquiConditionColumns(inputOrdinal: Int): Array[Int] = {
+    val leftFieldCount = getLeft.getRowType.getFieldCount
+    val columns = joinSpec.getNonEquiCondition
+      .map[Array[Int]](condition => RelOptUtil.InputFinder.bits(condition).toArray)
+      .orElse(Array.empty)
+    if (inputOrdinal == 0) {
+      columns.filter(_ < leftFieldCount)
     } else {
-      false
+      columns.filter(_ >= leftFieldCount).map(_ - leftFieldCount)
     }
   }
 
