@@ -20,6 +20,7 @@ package org.apache.flink.table.planner.plan.nodes.physical.stream;
 
 import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
+import org.apache.flink.table.planner.plan.metadata.FlinkRelMetadataQuery;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecLateralSnapshotJoin;
@@ -35,10 +36,14 @@ import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.util.ImmutableBitSet;
 
 import javax.annotation.Nullable;
 
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.Optional;
+import java.util.Set;
 
 import static org.apache.flink.table.planner.utils.ShortcutUtils.unwrapTableConfig;
 
@@ -129,6 +134,35 @@ public class StreamPhysicalLateralSnapshotJoin extends CommonPhysicalJoin
         return terms;
     }
 
+    /**
+     * Returns the build-side (right) upsert key to use for the partial-update build-side layout, or
+     * empty when the build side has no usable upsert key.
+     *
+     * <p>Eligible only when the build side has an upsert key that contains all join keys: the
+     * operator keys its state (keyed-state key) by the join keys and stores committed build rows
+     * per upsert key within that partition, so a partial delete that carries only the upsert key
+     * must still carry the join keys to be routed to the correct partition. Among the qualifying
+     * upsert keys the smallest (then lexicographically first) is chosen for a deterministic plan.
+     * This mirrors {@code StreamPhysicalJoin#inputUniqueKeyContainsJoinKey} for the build input.
+     */
+    public Optional<int[]> getBuildUpsertKey() {
+        final int[] rightKeys = joinSpec().getRightKeys();
+        final FlinkRelMetadataQuery fmq =
+                FlinkRelMetadataQuery.reuseOrCreate(getCluster().getMetadataQuery());
+        final Set<ImmutableBitSet> upsertKeys =
+                fmq.getUpsertKeysInKeyGroupRange(getRight(), rightKeys);
+        if (upsertKeys == null || upsertKeys.isEmpty()) {
+            return Optional.empty();
+        }
+        final ImmutableBitSet joinKeyBits = ImmutableBitSet.of(rightKeys);
+        return upsertKeys.stream()
+                .filter(upsertKey -> upsertKey.contains(joinKeyBits))
+                .min(
+                        Comparator.comparingInt(ImmutableBitSet::cardinality)
+                                .thenComparing(Comparator.naturalOrder()))
+                .map(ImmutableBitSet::toArray);
+    }
+
     @Override
     public ExecNode<?> translateToExecNode() {
         // The build-side row-time column index (from the on_time argument) drives the
@@ -152,6 +186,7 @@ public class StreamPhysicalLateralSnapshotJoin extends CommonPhysicalJoin
                 loadCompletedTime,
                 loadCompletedIdleTimeoutMs,
                 stateTtlMs,
+                getBuildUpsertKey().orElse(null),
                 InputProperty.DEFAULT,
                 InputProperty.DEFAULT,
                 FlinkTypeFactory.toLogicalRowType(getRowType()),

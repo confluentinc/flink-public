@@ -278,7 +278,10 @@ public class LateralSnapshotJoinTest extends TableTestBase {
     }
 
     @Test
-    void testInnerJoinWithUpsertBuildSourceMaterializesRetractions() {
+    void testInnerJoinWithUpsertBuildSourceSkipsChangelogNormalize() {
+        // When the build side is an upsert source whose upsert key contains the join key, the
+        // operator uses the upsert-keyed layout and consumes the changelog directly, so no
+        // ChangelogNormalize is inserted (FLINK-40914).
         util.tableEnv()
                 .executeSql(
                         "CREATE TABLE b_upsert ("
@@ -299,15 +302,17 @@ public class LateralSnapshotJoinTest extends TableTestBase {
                                         + "input => TABLE b_upsert, on_time => DESCRIPTOR(bts), "
                                         + "load_completed_time => CAST(TIMESTAMP '2026-07-01 00:00:00' AS TIMESTAMP_LTZ(3))"
                                         + ") AS s ON probe.pk = s.bk");
-        assertThat(plan).contains("ChangelogNormalize");
+        assertThat(plan).contains("LateralSnapshotJoin");
+        assertThat(plan).doesNotContain("ChangelogNormalize");
         assertThat(plan).doesNotContain("DropUpdateBefore");
     }
 
     @Test
-    void testRejectNonDeterministicUpdatingBuildColumnWithPrimaryKey() {
-        // The LSJ operator keys its state by the whole build row, so retractions are matched by
-        // exact row equality. A non-deterministic build column therefore breaks retraction even
-        // when the build side has a unique key (FLINK-40890). TRY_RESOLVE must reject it.
+    void testAcceptNonDeterministicNonKeyBuildColumnWithPrimaryKey() {
+        // With the upsert-keyed build-side layout, build retractions apply by the build upsert key
+        // rather than by whole-row match, so a non-deterministic non-key build column no longer
+        // breaks retraction. TRY_RESOLVE therefore accepts it (FLINK-40914 relaxes the
+        // FLINK-40890 restriction for keyed build sides).
         enableTryResolve();
         createUpdatingPkBuildSource();
         util.tableEnv()
@@ -318,6 +323,39 @@ public class LateralSnapshotJoinTest extends TableTestBase {
         final String sql =
                 "SELECT probe.pk, s.bk, s.bn FROM probe JOIN LATERAL SNAPSHOT("
                         + "input => TABLE b_view, on_time => DESCRIPTOR(bts), "
+                        + "load_completed_time => CAST(TIMESTAMP '2026-07-01 00:00:00' AS TIMESTAMP_LTZ(3))"
+                        + ") AS s ON probe.pk = s.bk";
+
+        assertThatCode(() -> util.tableEnv().explainSql(sql)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void testRejectNonDeterministicUpdatingBuildColumnWithoutUpsertKey() {
+        // Without a usable upsert key the operator falls back to the multi-set layout, which keys
+        // its state by the whole build row and matches retractions by exact row equality. A
+        // non-deterministic build column then breaks retraction, so TRY_RESOLVE must still reject
+        // it (the FLINK-40914 relaxation only applies to the upsert-keyed layout).
+        enableTryResolve();
+        util.tableEnv()
+                .executeSql(
+                        "CREATE TABLE b_retract ("
+                                + "  bk STRING,"
+                                + "  bv INT,"
+                                + "  bts TIMESTAMP(3),"
+                                + "  WATERMARK FOR bts AS bts"
+                                + ") WITH ("
+                                + "  'connector' = 'values',"
+                                + "  'bounded' = 'false',"
+                                + "  'changelog-mode' = 'I,UB,UA,D'"
+                                + ")");
+        util.tableEnv()
+                .executeSql(
+                        "CREATE VIEW b_retract_view AS "
+                                + "SELECT bk, CAST(NOW() AS STRING) AS bn, bts FROM b_retract");
+
+        final String sql =
+                "SELECT probe.pk, s.bk, s.bn FROM probe JOIN LATERAL SNAPSHOT("
+                        + "input => TABLE b_retract_view, on_time => DESCRIPTOR(bts), "
                         + "load_completed_time => CAST(TIMESTAMP '2026-07-01 00:00:00' AS TIMESTAMP_LTZ(3))"
                         + ") AS s ON probe.pk = s.bk";
 

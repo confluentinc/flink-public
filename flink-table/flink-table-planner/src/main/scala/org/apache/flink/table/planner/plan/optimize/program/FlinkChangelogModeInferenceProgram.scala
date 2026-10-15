@@ -781,12 +781,23 @@ class FlinkChangelogModeInferenceProgram extends FlinkOptimizeProgram[StreamOpti
 
         case lateralSnapshotJoin: StreamPhysicalLateralSnapshotJoin =>
           // Probe (left) is required to be append-only.
-          // Build (right) side requires BEFORE_AND_AFTER for updates.
           val left = lateralSnapshotJoin.getLeft.asInstanceOf[StreamPhysicalRel]
           val right = lateralSnapshotJoin.getRight.asInstanceOf[StreamPhysicalRel]
           val newLeftOption = this.visit(left, UpdateKindTrait.NONE)
           val rightInputModifyKindSet = getModifyKindSet(right)
-          val newRightOption = this.visit(right, beforeAfterOrNone(rightInputModifyKindSet))
+          // With an upsert-keyed build side, updates are applied by key, so UPDATE_BEFORE is not
+          // needed: ONLY_UPDATE_AFTER is enough and lets an upstream ChangelogNormalize be skipped.
+          // Fall back to BEFORE_AND_AFTER if the build input cannot provide ONLY_UPDATE_AFTER.
+          // Without a usable upsert key the multi-set layout matches by full row and needs
+          // BEFORE_AND_AFTER.
+          val newRightOption =
+            if (lateralSnapshotJoin.getBuildUpsertKey.isPresent) {
+              this
+                .visit(right, onlyAfterOrNone(rightInputModifyKindSet))
+                .orElse(this.visit(right, beforeAfterOrNone(rightInputModifyKindSet)))
+            } else {
+              this.visit(right, beforeAfterOrNone(rightInputModifyKindSet))
+            }
           (newLeftOption, newRightOption) match {
             case (Some(newLeft), Some(newRight)) =>
               createNewNode(
@@ -1339,7 +1350,7 @@ class FlinkChangelogModeInferenceProgram extends FlinkOptimizeProgram[StreamOpti
             _: StreamPhysicalPythonGroupTableAggregate | _: StreamPhysicalGroupWindowAggregateBase |
             _: StreamPhysicalWindowAggregate | _: StreamPhysicalSort | _: StreamPhysicalRank |
             _: StreamPhysicalSortLimit | _: StreamPhysicalTemporalJoin |
-            _: StreamPhysicalLateralSnapshotJoin | _: StreamPhysicalCorrelateBase |
+            _: StreamPhysicalCorrelateBase |
             _: StreamPhysicalLookupJoin | _: StreamPhysicalWatermarkAssigner |
             _: StreamPhysicalWindowTableFunction | _: StreamPhysicalWindowRank |
             _: StreamPhysicalWindowDeduplicate | _: StreamPhysicalTemporalSort |
@@ -1405,6 +1416,31 @@ class FlinkChangelogModeInferenceProgram extends FlinkOptimizeProgram[StreamOpti
             fullDeleteOrNone(modifyTrait)
           )
           createNewNode(process, Some(children), providedDeleteTrait)
+
+        case lateralSnapshotJoin: StreamPhysicalLateralSnapshotJoin =>
+          // Probe (left) is append-only. For the build (right) side an upsert-keyed layout can
+          // consume deletes by key (which lets an upstream ChangelogNormalize be skipped); the
+          // multi-set layout needs full deletes.
+          val left = lateralSnapshotJoin.getLeft.asInstanceOf[StreamPhysicalRel]
+          val right = lateralSnapshotJoin.getRight.asInstanceOf[StreamPhysicalRel]
+          val newLeftOption = this.visit(left, fullDeleteOrNone(getModifyKindSet(left)))
+          val rightModifyKindSet = getModifyKindSet(right)
+          val newRightOption =
+            if (lateralSnapshotJoin.getBuildUpsertKey.isPresent) {
+              this
+                .visit(right, deleteOnKeyOrNone(rightModifyKindSet))
+                .orElse(this.visit(right, fullDeleteOrNone(rightModifyKindSet)))
+            } else {
+              this.visit(right, fullDeleteOrNone(rightModifyKindSet))
+            }
+          (newLeftOption, newRightOption) match {
+            case (Some(newLeft), Some(newRight)) =>
+              createNewNode(
+                lateralSnapshotJoin,
+                Some(List(newLeft, newRight)),
+                fullDeleteOrNone(getModifyKindSet(rel)))
+            case _ => None
+          }
 
         case join: StreamPhysicalJoin =>
           val children = join.getInputs.zipWithIndex.map {

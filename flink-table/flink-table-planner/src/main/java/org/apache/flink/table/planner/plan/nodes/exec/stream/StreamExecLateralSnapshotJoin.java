@@ -39,12 +39,15 @@ import org.apache.flink.table.planner.plan.utils.KeySelectorUtil;
 import org.apache.flink.table.runtime.generated.GeneratedJoinCondition;
 import org.apache.flink.table.runtime.keyselector.RowDataKeySelector;
 import org.apache.flink.table.runtime.operators.join.FlinkJoinType;
+import org.apache.flink.table.runtime.operators.join.snapshot.LateralSnapshotJoinOperator;
 import org.apache.flink.table.runtime.operators.join.snapshot.MultiSetLateralSnapshotJoinOperator;
+import org.apache.flink.table.runtime.operators.join.snapshot.UpsertLateralSnapshotJoinOperator;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.util.Preconditions;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonCreator;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonInclude;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -64,6 +67,7 @@ import java.util.List;
                 StreamExecLateralSnapshotJoin.LATERAL_SNAPSHOT_JOIN_TRANSFORMATION,
         minPlanVersion = FlinkVersion.v2_4,
         minStateVersion = FlinkVersion.v2_4)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class StreamExecLateralSnapshotJoin extends ExecNodeBase<RowData>
         implements StreamExecNode<RowData>, SingleTransformationTranslator<RowData> {
 
@@ -76,6 +80,7 @@ public class StreamExecLateralSnapshotJoin extends ExecNodeBase<RowData>
     public static final String FIELD_NAME_LOAD_COMPLETED_IDLE_TIMEOUT_MS =
             "loadCompletedIdleTimeoutMs";
     public static final String FIELD_NAME_STATE_TTL_MS = "stateTtlMs";
+    public static final String FIELD_NAME_BUILD_UPSERT_KEYS = "buildUpsertKeys";
 
     @JsonProperty(FIELD_NAME_JOIN_SPEC)
     private final JoinSpec joinSpec;
@@ -102,6 +107,14 @@ public class StreamExecLateralSnapshotJoin extends ExecNodeBase<RowData>
     @Nullable
     private final Long stateTtlMs;
 
+    // Field indices of the build-side upsert key. When set, the build side is kept in the
+    // upsert-keyed layout that applies partial updates/deletes by key; when null (e.g. an older
+    // plan without this field), the legacy multi-set layout is used.
+    @JsonProperty(FIELD_NAME_BUILD_UPSERT_KEYS)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Nullable
+    private final int[] buildUpsertKeys;
+
     public StreamExecLateralSnapshotJoin(
             ReadableConfig tableConfig,
             JoinSpec joinSpec,
@@ -110,6 +123,7 @@ public class StreamExecLateralSnapshotJoin extends ExecNodeBase<RowData>
             Long loadCompletedTime,
             @Nullable Long loadCompletedIdleTimeoutMs,
             @Nullable Long stateTtlMs,
+            @Nullable int[] buildUpsertKeys,
             InputProperty leftInputProperty,
             InputProperty rightInputProperty,
             RowType outputType,
@@ -125,6 +139,7 @@ public class StreamExecLateralSnapshotJoin extends ExecNodeBase<RowData>
                 loadCompletedTime,
                 loadCompletedIdleTimeoutMs,
                 stateTtlMs,
+                buildUpsertKeys,
                 List.of(leftInputProperty, rightInputProperty),
                 outputType,
                 description);
@@ -142,6 +157,7 @@ public class StreamExecLateralSnapshotJoin extends ExecNodeBase<RowData>
             @JsonProperty(FIELD_NAME_LOAD_COMPLETED_IDLE_TIMEOUT_MS) @Nullable
                     Long loadCompletedIdleTimeoutMs,
             @JsonProperty(FIELD_NAME_STATE_TTL_MS) @Nullable Long stateTtlMs,
+            @JsonProperty(FIELD_NAME_BUILD_UPSERT_KEYS) @Nullable int[] buildUpsertKeys,
             @JsonProperty(FIELD_NAME_INPUT_PROPERTIES) List<InputProperty> inputProperties,
             @JsonProperty(FIELD_NAME_OUTPUT_TYPE) RowType outputType,
             @JsonProperty(FIELD_NAME_DESCRIPTION) String description) {
@@ -166,6 +182,7 @@ public class StreamExecLateralSnapshotJoin extends ExecNodeBase<RowData>
                 stateTtlMs);
         this.loadCompletedIdleTimeoutMs = loadCompletedIdleTimeoutMs;
         this.stateTtlMs = stateTtlMs;
+        this.buildUpsertKeys = buildUpsertKeys;
     }
 
     @Override
@@ -204,17 +221,32 @@ public class StreamExecLateralSnapshotJoin extends ExecNodeBase<RowData>
         final long effectiveStateTtlMs =
                 stateTtlMs != null ? stateTtlMs : config.getStateRetentionTime();
 
-        final MultiSetLateralSnapshotJoinOperator operator =
-                new MultiSetLateralSnapshotJoinOperator(
-                        isLeftOuterJoin,
-                        InternalTypeInfo.of(leftInputType),
-                        InternalTypeInfo.of(rightInputType),
-                        rightTimeAttributeIndex,
-                        generatedJoinCondition,
-                        joinSpec.getFilterNulls(),
-                        loadCompletedTime,
-                        loadCompletedIdleTimeoutMs,
-                        effectiveStateTtlMs);
+        // When the build side has a usable upsert key the planner records it here and we use the
+        // upsert-keyed layout that applies partial updates/deletes by key; otherwise (incl. older
+        // plans without this field) we fall back to the legacy multi-set layout.
+        final LateralSnapshotJoinOperator operator =
+                buildUpsertKeys != null
+                        ? new UpsertLateralSnapshotJoinOperator(
+                                isLeftOuterJoin,
+                                InternalTypeInfo.of(leftInputType),
+                                InternalTypeInfo.of(rightInputType),
+                                rightTimeAttributeIndex,
+                                generatedJoinCondition,
+                                joinSpec.getFilterNulls(),
+                                loadCompletedTime,
+                                loadCompletedIdleTimeoutMs,
+                                effectiveStateTtlMs,
+                                buildUpsertKeys)
+                        : new MultiSetLateralSnapshotJoinOperator(
+                                isLeftOuterJoin,
+                                InternalTypeInfo.of(leftInputType),
+                                InternalTypeInfo.of(rightInputType),
+                                rightTimeAttributeIndex,
+                                generatedJoinCondition,
+                                joinSpec.getFilterNulls(),
+                                loadCompletedTime,
+                                loadCompletedIdleTimeoutMs,
+                                effectiveStateTtlMs);
 
         final Transformation<RowData> leftTransform =
                 (Transformation<RowData>) leftInputEdge.translateToPlan(planner);

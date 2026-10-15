@@ -631,10 +631,17 @@ public class StreamNonDeterministicUpdatePlanVisitor {
             throwNonDeterministicConditionError(
                     ndCall.get(), join.getCondition(), (StreamPhysicalRel) join);
         }
-        // The LATERAL SNAPSHOT join keys its build (right) state by the complete build row, so
-        // build retractions are matched by exact row equality. A unique key offers no protection
-        // here: every build column must be deterministic whenever the build side can update.
-        boolean forceRightWholeRowDeterminism = join instanceof StreamPhysicalLateralSnapshotJoin;
+        // The multi-set LATERAL SNAPSHOT join keys its build (right) state by the complete build
+        // row, so build retractions are matched by exact row equality and every build column must
+        // be deterministic whenever the build side can update. With the upsert-keyed layout,
+        // retractions apply by the build upsert key instead, so the normal unique-key handling
+        // (determinism on the required columns) is sufficient and whole-row determinism is not
+        // forced.
+        boolean forceRightWholeRowDeterminism =
+                join instanceof StreamPhysicalLateralSnapshotJoin
+                        && !((StreamPhysicalLateralSnapshotJoin) join)
+                                .getBuildUpsertKey()
+                                .isPresent();
         int leftFieldCnt = leftRel.getRowType().getFieldCount();
         StreamPhysicalRel newLeft =
                 visitJoinChild(
