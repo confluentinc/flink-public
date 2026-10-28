@@ -31,6 +31,7 @@ import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericRecord;
+import org.apache.avro.io.BinaryDecoder;
 import org.apache.avro.io.Decoder;
 import org.apache.avro.io.DecoderFactory;
 import org.apache.avro.io.JsonDecoder;
@@ -182,6 +183,23 @@ public class AvroDeserializationSchema<T> implements DeserializationSchema<T> {
         }
 
         return datumReader.read(null, decoder);
+    }
+
+    /**
+     * Resets the binary decoder after a deserialization failure.
+     *
+     * <p>{@link BinaryDecoder} pre-fetches bytes from the underlying stream into an internal
+     * read-ahead buffer. When a decode fails mid-message the unconsumed bytes remain in that buffer
+     * and corrupt the next message. Reinitialising the decoder discards the stale buffer so the
+     * next call to {@link #deserialize} reads cleanly from the new message bytes.
+     *
+     * <p>This is a no-op for JSON encoding because {@link JsonDecoder} is reconfigured on every
+     * message via {@code configure()}.
+     */
+    void resetDecoder() throws IOException {
+        if (encoding == AvroEncoding.BINARY) {
+            this.decoder = DecoderFactory.get().binaryDecoder(inputStream, (BinaryDecoder) decoder);
+        }
     }
 
     void checkAvroInitialized() throws IOException {
